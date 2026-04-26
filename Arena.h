@@ -36,4 +36,7 @@ private:
     std::vector<RobotEntry> m_robots;
     void initializeBoard();
     std::string trim(const std::string& text);
+    void printBoard();
+    void placeRandomObstacle(char obstacle_char);
+    void placeObstacles();
 };
