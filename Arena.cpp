@@ -4,6 +4,8 @@
 #include <sstream>
 #include <cctype>
 #include <cstdlib>
+#include <filesystem>
+#include <dlfcn.h>
 
 RobotEntry::RobotEntry()
     : m_robot(nullptr), m_handle(nullptr), m_symbol('?'), m_alive(false),
@@ -151,10 +153,307 @@ void Arena::placeObstacles() {
     }
 }
 
+std::vector<std::string> Arena::findRobotSourceFiles() {
+    std::vector<std::string> robot_files;
+
+    for (const auto& entry : std::filesystem::directory_iterator("robots")) {
+        if (!entry.is_regular_file()) {
+            continue;
+        }
+
+        std::string filename = entry.path().filename().string();
+
+        if (filename.size() >= 10 &&
+            filename.substr(0, 6) == "Robot_" &&
+            filename.substr(filename.size() - 4) == ".cpp") {
+            robot_files.push_back(entry.path().string());
+        }
+    }
+
+    return robot_files;
+}
+
+void Arena::printRobotSourceFiles(const std::vector<std::string>& robot_files) {
+    std::cout << "Robot source files found:" << std::endl;
+
+    for (std::size_t i = 0; i < robot_files.size(); i++) {
+        std::cout << "  " << robot_files[i] << std::endl;
+    }
+}
+
+bool Arena::compileRobotSource(const std::string& robot_cpp_file, std::string& shared_lib_file) {
+    std::filesystem::path cpp_path(robot_cpp_file);
+    std::string stem = cpp_path.stem().string();   // example: Robot_Ratboy
+    shared_lib_file = "robots/lib" + stem + ".so"; // example: robots/libRobot_Ratboy.so
+
+    std::string compile_cmd =
+        "g++ -shared -fPIC -o " + shared_lib_file + " " +
+        robot_cpp_file + " RobotBase.o -I. -std=c++20";
+
+    std::cout << "Compiling " << robot_cpp_file
+              << " into " << shared_lib_file << "..." << std::endl;
+
+    int result = std::system(compile_cmd.c_str());
+    if (result != 0) {
+        std::cerr << "Failed to compile " << robot_cpp_file << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
+bool Arena::loadRobotLibrary(const std::string& shared_lib_file, const std::string& source_file) {
+    using RobotSummaryFn = const char* (*)();
+
+    void* handle = dlopen(shared_lib_file.c_str(), RTLD_LAZY);
+    if (!handle) {
+        std::cerr << "Failed to load " << shared_lib_file << ": " << dlerror() << std::endl;
+        return false;
+    }
+
+    RobotFactory create_robot = (RobotFactory)dlsym(handle, "create_robot");
+    if (!create_robot) {
+        std::cerr << "Failed to find create_robot in " << shared_lib_file << ": " << dlerror() << std::endl;
+        dlclose(handle);
+        return false;
+    }
+
+    RobotSummaryFn robot_summary = (RobotSummaryFn)dlsym(handle, "robot_summary");
+    if (!robot_summary) {
+        std::cerr << "Failed to find robot_summary in " << shared_lib_file << ": " << dlerror() << std::endl;
+        dlclose(handle);
+        return false;
+    }
+
+    const char* summary_text = robot_summary();
+    if (!summary_text) {
+        std::cerr << "robot_summary returned null for " << shared_lib_file << std::endl;
+        dlclose(handle);
+        return false;
+    }
+
+    RobotBase* robot = create_robot();
+    if (!robot) {
+        std::cerr << "Failed to create robot from " << shared_lib_file << std::endl;
+        dlclose(handle);
+        return false;
+    }
+
+    RobotEntry entry;
+    entry.m_robot = robot;
+    entry.m_handle = handle;
+    entry.m_alive = true;
+    entry.m_source_file = source_file;
+    entry.m_summary = summary_text;
+
+    m_robots.push_back(entry);
+
+    std::cout << "Loaded robot from " << source_file << std::endl;
+    std::cout << "Summary: " << entry.m_summary << std::endl;
+
+    return true;
+}
+
+void Arena::loadRobots() {
+    std::vector<std::string> robot_files = findRobotSourceFiles();
+
+    if (robot_files.empty()) {
+        std::cout << "No robot source files found." << std::endl;
+        return;
+    }
+
+    for (std::size_t i = 0; i < robot_files.size(); i++) {
+        std::string shared_lib_file;
+
+        if (!compileRobotSource(robot_files[i], shared_lib_file)) {
+            continue;
+        }
+
+        loadRobotLibrary(shared_lib_file, robot_files[i]);
+    }
+
+    std::cout << "Total robots loaded: " << m_robots.size() << std::endl;
+}
+
+void Arena::assignRobotSymbols() {
+    std::string symbols = "@#$!%&*ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+    for (std::size_t i = 0; i < m_robots.size(); i++) {
+        if (i < symbols.size()) {
+            m_robots[i].m_symbol = symbols[i];
+        }
+        else {
+            m_robots[i].m_symbol = '?';
+        }
+    }
+}
+
+void Arena::placeRobots() {
+    for (std::size_t i = 0; i < m_robots.size(); i++) {
+        while (true) {
+            int row = std::rand() % m_height;
+            int col = std::rand() % m_width;
+
+            if (m_board[row][col] == '.') {
+                m_robots[i].m_robot->move_to(row, col);
+                m_robots[i].m_robot->set_boundaries(m_height, m_width);
+                m_board[row][col] = m_robots[i].m_symbol;
+                break;
+            }
+        }
+    }
+}
+
+int Arena::countLivingRobots() const {
+    int count = 0;
+
+    for (std::size_t i = 0; i < m_robots.size(); i++) {
+        if (m_robots[i].m_alive && m_robots[i].m_robot->get_health() > 0) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+void Arena::printRobotStats() {
+    std::cout << "Robot stats:" << std::endl;
+
+    for (std::size_t i = 0; i < m_robots.size(); i++) {
+        std::cout << "  " << m_robots[i].m_robot->print_stats() << std::endl;
+    }
+}
+
+void Arena::addRadarCell(std::vector<RadarObj>& radar_results, int row, int col, int robot_row, int robot_col) {
+    if (row < 0 || row >= m_height || col < 0 || col >= m_width) {
+        return;
+    }
+
+    if (row == robot_row && col == robot_col) {
+        return;
+    }
+
+    char cell = m_board[row][col];
+    if (cell == '.') {
+        return;
+    }
+
+    radar_results.push_back(RadarObj(cell, row, col));
+}
+
+std::vector<RadarObj> Arena::performRadarScan(RobotBase* robot, int radar_direction) {
+    std::vector<RadarObj> radar_results;
+
+    int robot_row = 0;
+    int robot_col = 0;
+    robot->get_current_location(robot_row, robot_col);
+
+    if (radar_direction == 0) {
+        for (int dir = 1; dir <= 8; dir++) {
+            int row = robot_row + directions[dir].first;
+            int col = robot_col + directions[dir].second;
+            addRadarCell(radar_results, row, col, robot_row, robot_col);
+        }
+        return radar_results;
+    }
+
+    int main_row_delta = directions[radar_direction].first;
+    int main_col_delta = directions[radar_direction].second;
+
+    int side_row_delta = 0;
+    int side_col_delta = 0;
+
+    if (radar_direction == 1 || radar_direction == 5) {
+        side_row_delta = 0;
+        side_col_delta = 1;
+    }
+    else if (radar_direction == 3 || radar_direction == 7) {
+        side_row_delta = 1;
+        side_col_delta = 0;
+    }
+    else if (radar_direction == 2 || radar_direction == 6) {
+        side_row_delta = 1;
+        side_col_delta = -1;
+    }
+    else if (radar_direction == 4 || radar_direction == 8) {
+        side_row_delta = 1;
+        side_col_delta = 1;
+    }
+
+    int current_row = robot_row + main_row_delta;
+    int current_col = robot_col + main_col_delta;
+
+    while (current_row >= 0 && current_row < m_height &&
+           current_col >= 0 && current_col < m_width) {
+
+        addRadarCell(radar_results, current_row, current_col, robot_row, robot_col);
+        addRadarCell(radar_results, current_row + side_row_delta, current_col + side_col_delta, robot_row, robot_col);
+        addRadarCell(radar_results, current_row - side_row_delta, current_col - side_col_delta, robot_row, robot_col);
+
+        current_row += main_row_delta;
+        current_col += main_col_delta;
+    }
+
+    return radar_results;
+}
+
+void Arena::printRadarResults(const std::vector<RadarObj>& radar_results) {
+    if (radar_results.empty()) {
+        std::cout << "  radar scan returned nothing" << std::endl;
+        return;
+    }
+
+    std::cout << "  radar scan returned:" << std::endl;
+    for (std::size_t i = 0; i < radar_results.size(); i++) {
+        std::cout << "    " << radar_results[i].m_type
+                  << " at (" << radar_results[i].m_row
+                  << "," << radar_results[i].m_col << ")" << std::endl;
+    }
+}
+
 void Arena::run() {
     initializeBoard();
     placeObstacles();
+
     std::cout << "Arena started." << std::endl;
     std::cout << "Board size: " << m_height << " x " << m_width << std::endl;
-    printBoard();
+
+    loadRobots();
+    assignRobotSymbols();
+    placeRobots();
+
+    while (m_round <= m_max_rounds) {
+        std::cout << std::endl;
+        std::cout << "=========== starting round " << m_round << " ===========" << std::endl;
+
+        printBoard();
+        printRobotStats();
+
+        if (countLivingRobots() <= 1) {
+            std::cout << "Game over." << std::endl;
+            break;
+        }
+
+        for (std::size_t i = 0; i < m_robots.size(); i++) {
+            if (!m_robots[i].m_alive || m_robots[i].m_robot->get_health() <= 0) {
+                continue;
+            }
+
+            std::cout << "Taking turn for robot " << m_robots[i].m_symbol << std::endl;
+
+            int radar_direction = 0;
+            m_robots[i].m_robot->get_radar_direction(radar_direction);
+
+            std::cout << "  radar direction: " << radar_direction << std::endl;
+
+            std::vector<RadarObj> radar_results =
+                performRadarScan(m_robots[i].m_robot, radar_direction);
+
+            printRadarResults(radar_results);
+
+            m_robots[i].m_robot->process_radar_results(radar_results);
+        }
+
+        m_round++;
+    }
 }

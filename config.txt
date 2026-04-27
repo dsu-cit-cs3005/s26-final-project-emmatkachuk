@@ -1,5 +1,5 @@
 Arena_Size:20 20
-Max_Rounds:100
+Max_Rounds:5
 Sleep_interval:0.5
 Game_State_Live:true
 Flamethrowers:2
