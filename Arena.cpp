@@ -481,8 +481,95 @@ bool Arena::handleRobotShot(RobotEntry& robot_entry) {
 }
 
 void Arena::handleRailgunShot(RobotEntry& robot_entry, int shot_row, int shot_col) {
-    (void)robot_entry;
-    applyDamageToRobotAt(shot_row, shot_col, railgun);
+    int robot_row = 0;
+    int robot_col = 0;
+    robot_entry.m_robot->get_current_location(robot_row, robot_col);
+
+    int delta_row = shot_row - robot_row;
+    int delta_col = shot_col - robot_col;
+
+    if (delta_row != 0) {
+        if (delta_row > 0) {
+            delta_row = 1;
+        }
+        else {
+            delta_row = -1;
+        }
+    }
+
+    if (delta_col != 0) {
+        if (delta_col > 0) {
+            delta_col = 1;
+        }
+        else {
+            delta_col = -1;
+        }
+    }
+
+    if (delta_row == 0 && delta_col == 0) {
+        std::cout << "  railgun cannot target its own cell" << std::endl;
+        return;
+    }
+
+    int current_row = robot_row + delta_row;
+    int current_col = robot_col + delta_col;
+
+    while (isWithinBounds(current_row, current_col)) {
+        applyDamageToRobotAt(current_row, current_col, railgun);
+        current_row += delta_row;
+        current_col += delta_col;
+    }
+}
+
+bool Arena::isBlockingCell(int row, int col) {
+    if (!isWithinBounds(row, col)) {
+        return true;
+    }
+
+    bool alive = false;
+    if (isRobotAtLocation(row, col, alive)) {
+        return true;
+    }
+
+    char cell = m_board[row][col];
+    if (cell == 'M' || cell == 'X') {
+        return true;
+    }
+
+    return false;
+}
+
+void Arena::handlePitCell(RobotEntry& robot_entry, int row, int col) {
+    std::cout << "  robot falls into pit at (" << row << "," << col << ")" << std::endl;
+    moveRobotOnBoard(robot_entry, row, col);
+    robot_entry.m_robot->disable_movement();
+}
+
+void Arena::handleFlamethrowerCell(RobotEntry& robot_entry, int row, int col) {
+    std::cout << "  robot passes through flamethrower at (" << row << "," << col << ")" << std::endl;
+    moveRobotOnBoard(robot_entry, row, col);
+
+    int damage = calculateWeaponDamage(flamethrower);
+    int armor = robot_entry.m_robot->get_armor();
+
+    double reduction = armor * 0.10;
+    int reduced_damage = static_cast<int>(damage * (1.0 - reduction));
+
+    if (reduced_damage < 0) {
+        reduced_damage = 0;
+    }
+
+    robot_entry.m_robot->reduce_armor(1);
+    int health_after = robot_entry.m_robot->take_damage(reduced_damage);
+
+    std::cout << "  flamethrower damage dealt: " << reduced_damage << std::endl;
+    std::cout << "  health now: " << health_after << std::endl;
+
+    if (health_after <= 0) {
+        robot_entry.m_alive = false;
+        m_board[row][col] = 'X';
+        std::cout << "  robot is destroyed" << std::endl;
+    }
 }
 
 void Arena::handleHammerShot(RobotEntry& robot_entry, int shot_row, int shot_col) {
@@ -709,6 +796,16 @@ void Arena::applyDamageToRobotAt(int row, int col, WeaponType weapon) {
     }
 }
 
+int Arena::findLastLivingRobotIndex() const {
+    for (std::size_t i = 0; i < m_robots.size(); i++) {
+        if (m_robots[i].m_alive && m_robots[i].m_robot->get_health() > 0) {
+            return static_cast<int>(i);
+        }
+    }
+
+    return -1;
+}
+
 void Arena::run() {
     initializeBoard();
     placeObstacles();
@@ -729,6 +826,16 @@ void Arena::run() {
 
         if (countLivingRobots() <= 1) {
             std::cout << "Game over." << std::endl;
+
+            int winner_index = findLastLivingRobotIndex();
+            if (winner_index != -1) {
+                std::cout << "Winner: robot " << m_robots[winner_index].m_symbol << std::endl;
+                std::cout << m_robots[winner_index].m_robot->print_stats() << std::endl;
+            }
+            else {
+                std::cout << "No robot survived." << std::endl;
+            }
+
             break;
         }
 
@@ -756,6 +863,7 @@ void Arena::run() {
             if (fired) {
                 std::cout << "  shot action completed" << std::endl;
             }
+
             if (!fired) {
                 handleRobotMovement(m_robots[i]);
             }

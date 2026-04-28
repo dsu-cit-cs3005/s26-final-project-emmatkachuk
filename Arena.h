@@ -63,4 +63,8 @@ private:
     void handleHammerShot(RobotEntry& robot_entry, int shot_row, int shot_col);
     void handleGrenadeShot(RobotEntry& robot_entry, int shot_row, int shot_col);
     void handleFlamethrowerShot(RobotEntry& robot_entry, int shot_row, int shot_col);
+    bool isBlockingCell(int row, int col);
+    void handlePitCell(RobotEntry& robot_entry, int row, int col);
+    void handleFlamethrowerCell(RobotEntry& robot_entry, int row, int col);
+    int findLastLivingRobotIndex() const;
 };
