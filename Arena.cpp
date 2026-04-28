@@ -333,6 +333,17 @@ void Arena::addRadarCell(std::vector<RadarObj>& radar_results, int row, int col,
         return;
     }
 
+    bool alive = false;
+    if (isRobotAtLocation(row, col, alive)) {
+        if (alive) {
+            radar_results.push_back(RadarObj('R', row, col));
+        }
+        else {
+            radar_results.push_back(RadarObj('X', row, col));
+        }
+        return;
+    }
+
     char cell = m_board[row][col];
     if (cell == '.') {
         return;
@@ -411,6 +422,43 @@ void Arena::printRadarResults(const std::vector<RadarObj>& radar_results) {
     }
 }
 
+int Arena::findRobotIndexAtLocation(int row, int col) {
+    for (std::size_t i = 0; i < m_robots.size(); i++) {
+        int robot_row = 0;
+        int robot_col = 0;
+        m_robots[i].m_robot->get_current_location(robot_row, robot_col);
+
+        if (robot_row == row && robot_col == col) {
+            return static_cast<int>(i);
+        }
+    }
+
+    return -1;
+}
+
+bool Arena::isRobotAtLocation(int row, int col, bool& alive_out) {
+    int index = findRobotIndexAtLocation(row, col);
+    if (index == -1) {
+        return false;
+    }
+
+    alive_out = m_robots[index].m_alive && m_robots[index].m_robot->get_health() > 0;
+    return true;
+}
+
+bool Arena::handleRobotShot(RobotEntry& robot_entry) {
+    int shot_row = 0;
+    int shot_col = 0;
+
+    if (robot_entry.m_robot->get_shot_location(shot_row, shot_col)) {
+        std::cout << "  robot fires at (" << shot_row << "," << shot_col << ")" << std::endl;
+        return true;
+    }
+
+    std::cout << "  robot does not fire" << std::endl;
+    return false;
+}
+
 void Arena::run() {
     initializeBoard();
     placeObstacles();
@@ -452,6 +500,12 @@ void Arena::run() {
             printRadarResults(radar_results);
 
             m_robots[i].m_robot->process_radar_results(radar_results);
+
+            bool fired = handleRobotShot(m_robots[i]);
+
+            if (fired) {
+                std::cout << "  shot action completed" << std::endl;
+            }
         }
 
         m_round++;

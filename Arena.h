@@ -51,4 +51,7 @@ private:
     std::vector<RadarObj> performRadarScan(RobotBase* robot, int radar_direction);
     void addRadarCell(std::vector<RadarObj>& radar_results, int row, int col, int robot_row, int robot_col);
     void printRadarResults(const std::vector<RadarObj>& radar_results);
+    bool isRobotAtLocation(int row, int col, bool& alive_out);
+    int findRobotIndexAtLocation(int row, int col);
+    bool handleRobotShot(RobotEntry& robot_entry);
 };
