@@ -450,13 +450,263 @@ bool Arena::handleRobotShot(RobotEntry& robot_entry) {
     int shot_row = 0;
     int shot_col = 0;
 
-    if (robot_entry.m_robot->get_shot_location(shot_row, shot_col)) {
-        std::cout << "  robot fires at (" << shot_row << "," << shot_col << ")" << std::endl;
+    if (!robot_entry.m_robot->get_shot_location(shot_row, shot_col)) {
+        std::cout << "  robot does not fire" << std::endl;
+        return false;
+    }
+
+    std::cout << "  robot fires at (" << shot_row << "," << shot_col << ")" << std::endl;
+
+    if (!isWithinBounds(shot_row, shot_col)) {
+        std::cout << "  shot is out of bounds" << std::endl;
         return true;
     }
 
-    std::cout << "  robot does not fire" << std::endl;
-    return false;
+    WeaponType weapon = robot_entry.m_robot->get_weapon();
+
+    if (weapon == railgun) {
+        handleRailgunShot(robot_entry, shot_row, shot_col);
+    }
+    else if (weapon == hammer) {
+        handleHammerShot(robot_entry, shot_row, shot_col);
+    }
+    else if (weapon == grenade) {
+        handleGrenadeShot(robot_entry, shot_row, shot_col);
+    }
+    else if (weapon == flamethrower) {
+        handleFlamethrowerShot(robot_entry, shot_row, shot_col);
+    }
+
+    return true;
+}
+
+void Arena::handleRailgunShot(RobotEntry& robot_entry, int shot_row, int shot_col) {
+    (void)robot_entry;
+    applyDamageToRobotAt(shot_row, shot_col, railgun);
+}
+
+void Arena::handleHammerShot(RobotEntry& robot_entry, int shot_row, int shot_col) {
+    int robot_row = 0;
+    int robot_col = 0;
+    robot_entry.m_robot->get_current_location(robot_row, robot_col);
+
+    int row_diff = shot_row - robot_row;
+    int col_diff = shot_col - robot_col;
+
+    if (row_diff < -1 || row_diff > 1 || col_diff < -1 || col_diff > 1) {
+        std::cout << "  hammer target is too far away" << std::endl;
+        return;
+    }
+
+    if (row_diff == 0 && col_diff == 0) {
+        std::cout << "  hammer cannot hit its own cell" << std::endl;
+        return;
+    }
+
+    applyDamageToRobotAt(shot_row, shot_col, hammer);
+}
+
+void Arena::handleGrenadeShot(RobotEntry& robot_entry, int shot_row, int shot_col) {
+    (void)robot_entry;
+
+    for (int row = shot_row - 1; row <= shot_row + 1; row++) {
+        for (int col = shot_col - 1; col <= shot_col + 1; col++) {
+            if (isWithinBounds(row, col)) {
+                applyDamageToRobotAt(row, col, grenade);
+            }
+        }
+    }
+}
+
+void Arena::handleFlamethrowerShot(RobotEntry& robot_entry, int shot_row, int shot_col) {
+    int robot_row = 0;
+    int robot_col = 0;
+    robot_entry.m_robot->get_current_location(robot_row, robot_col);
+
+    int delta_row = shot_row - robot_row;
+    int delta_col = shot_col - robot_col;
+
+    if (delta_row != 0) {
+        if (delta_row > 0) {
+            delta_row = 1;
+        }
+        else {
+            delta_row = -1;
+        }
+    }
+
+    if (delta_col != 0) {
+        if (delta_col > 0) {
+            delta_col = 1;
+        }
+        else {
+            delta_col = -1;
+        }
+    }
+
+    int side_row = 0;
+    int side_col = 0;
+
+    if (delta_row != 0 && delta_col == 0) {
+        side_row = 0;
+        side_col = 1;
+    }
+    else if (delta_row == 0 && delta_col != 0) {
+        side_row = 1;
+        side_col = 0;
+    }
+    else {
+        side_row = -delta_col;
+        side_col = delta_row;
+    }
+
+    int current_row = robot_row;
+    int current_col = robot_col;
+
+    for (int step = 1; step <= 4; step++) {
+        current_row += delta_row;
+        current_col += delta_col;
+
+        int center_row = current_row;
+        int center_col = current_col;
+
+        int left_row = center_row + side_row;
+        int left_col = center_col + side_col;
+
+        int right_row = center_row - side_row;
+        int right_col = center_col - side_col;
+
+        if (isWithinBounds(center_row, center_col)) {
+            applyDamageToRobotAt(center_row, center_col, flamethrower);
+        }
+
+        if (isWithinBounds(left_row, left_col)) {
+            applyDamageToRobotAt(left_row, left_col, flamethrower);
+        }
+
+        if (isWithinBounds(right_row, right_col)) {
+            applyDamageToRobotAt(right_row, right_col, flamethrower);
+        }
+    }
+}
+
+bool Arena::handleRobotMovement(RobotEntry& robot_entry) {
+    int move_direction = 0;
+    int move_distance = 0;
+
+    robot_entry.m_robot->get_move_direction(move_direction, move_distance);
+
+    if (move_direction == 0 || move_distance == 0) {
+        std::cout << "  robot does not move" << std::endl;
+        return false;
+    }
+
+    int max_move = robot_entry.m_robot->get_move_speed();
+    if (move_distance > max_move) {
+        move_distance = max_move;
+    }
+
+    int current_row = 0;
+    int current_col = 0;
+    robot_entry.m_robot->get_current_location(current_row, current_col);
+
+    int delta_row = directions[move_direction].first;
+    int delta_col = directions[move_direction].second;
+
+    int final_row = current_row;
+    int final_col = current_col;
+
+    for (int step = 0; step < move_distance; step++) {
+        int next_row = final_row + delta_row;
+        int next_col = final_col + delta_col;
+
+        if (!isWithinBounds(next_row, next_col)) {
+            break;
+        }
+
+        if (m_board[next_row][next_col] != '.') {
+            break;
+        }
+
+        final_row = next_row;
+        final_col = next_col;
+    }
+
+    if (final_row == current_row && final_col == current_col) {
+        std::cout << "  robot could not move" << std::endl;
+        return false;
+    }
+
+    std::cout << "  robot moves to (" << final_row << "," << final_col << ")" << std::endl;
+    moveRobotOnBoard(robot_entry, final_row, final_col);
+    return true;
+}
+
+bool Arena::isWithinBounds(int row, int col) const {
+    return row >= 0 && row < m_height && col >= 0 && col < m_width;
+}
+
+void Arena::moveRobotOnBoard(RobotEntry& robot_entry, int new_row, int new_col) {
+    int old_row = 0;
+    int old_col = 0;
+    robot_entry.m_robot->get_current_location(old_row, old_col);
+
+    m_board[old_row][old_col] = '.';
+    robot_entry.m_robot->move_to(new_row, new_col);
+    m_board[new_row][new_col] = robot_entry.m_symbol;
+}
+
+int Arena::calculateWeaponDamage(WeaponType weapon) {
+    if (weapon == railgun) {
+        return 10 + (std::rand() % 11);
+    }
+    else if (weapon == hammer) {
+        return 50 + (std::rand() % 11);
+    }
+    else if (weapon == grenade) {
+        return 10 + (std::rand() % 31);
+    }
+    else if (weapon == flamethrower) {
+        return 30 + (std::rand() % 21);
+    }
+
+    return 0;
+}
+
+void Arena::applyDamageToRobotAt(int row, int col, WeaponType weapon) {
+    int robot_index = findRobotIndexAtLocation(row, col);
+    if (robot_index == -1) {
+        return;
+    }
+
+    if (!m_robots[robot_index].m_alive || m_robots[robot_index].m_robot->get_health() <= 0) {
+        return;
+    }
+
+    RobotBase* target_robot = m_robots[robot_index].m_robot;
+
+    int damage = calculateWeaponDamage(weapon);
+    int armor = target_robot->get_armor();
+
+    double reduction = armor * 0.10;
+    int reduced_damage = static_cast<int>(damage * (1.0 - reduction));
+
+    if (reduced_damage < 0) {
+        reduced_damage = 0;
+    }
+
+    target_robot->reduce_armor(1);
+    int health_after = target_robot->take_damage(reduced_damage);
+
+    std::cout << "  hit robot at (" << row << "," << col << ")" << std::endl;
+    std::cout << "  damage dealt: " << reduced_damage << std::endl;
+    std::cout << "  health now: " << health_after << std::endl;
+
+    if (health_after <= 0) {
+        m_robots[robot_index].m_alive = false;
+        m_board[row][col] = 'X';
+        std::cout << "  robot is destroyed" << std::endl;
+    }
 }
 
 void Arena::run() {
@@ -505,6 +755,9 @@ void Arena::run() {
 
             if (fired) {
                 std::cout << "  shot action completed" << std::endl;
+            }
+            if (!fired) {
+                handleRobotMovement(m_robots[i]);
             }
         }
 

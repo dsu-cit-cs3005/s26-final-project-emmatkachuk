@@ -54,4 +54,13 @@ private:
     bool isRobotAtLocation(int row, int col, bool& alive_out);
     int findRobotIndexAtLocation(int row, int col);
     bool handleRobotShot(RobotEntry& robot_entry);
+    bool handleRobotMovement(RobotEntry& robot_entry);
+    bool isWithinBounds(int row, int col) const;
+    void moveRobotOnBoard(RobotEntry& robot_entry, int new_row, int new_col);
+    int calculateWeaponDamage(WeaponType weapon);
+    void applyDamageToRobotAt(int row, int col, WeaponType weapon);
+    void handleRailgunShot(RobotEntry& robot_entry, int shot_row, int shot_col);
+    void handleHammerShot(RobotEntry& robot_entry, int shot_row, int shot_col);
+    void handleGrenadeShot(RobotEntry& robot_entry, int shot_row, int shot_col);
+    void handleFlamethrowerShot(RobotEntry& robot_entry, int shot_row, int shot_col);
 };
