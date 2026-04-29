@@ -464,6 +464,11 @@ bool Arena::handleRobotShot(RobotEntry& robot_entry) {
 
     WeaponType weapon = robot_entry.m_robot->get_weapon();
 
+    if (weapon == grenade && robot_entry.m_robot->get_grenades() <= 0) {
+        std::cout << "  robot has no grenades left" << std::endl;
+        return false;
+    }
+
     if (weapon == railgun) {
         handleRailgunShot(robot_entry, shot_row, shot_col);
     }
@@ -472,6 +477,7 @@ bool Arena::handleRobotShot(RobotEntry& robot_entry) {
     }
     else if (weapon == grenade) {
         handleGrenadeShot(robot_entry, shot_row, shot_col);
+        robot_entry.m_robot->decrement_grenades();
     }
     else if (weapon == flamethrower) {
         handleFlamethrowerShot(robot_entry, shot_row, shot_col);
