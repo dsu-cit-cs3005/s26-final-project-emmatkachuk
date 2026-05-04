@@ -316,11 +316,45 @@ int Arena::countLivingRobots() const {
     return count;
 }
 
+std::string weaponToString(WeaponType weapon) {
+    if (weapon == flamethrower) {
+        return "flamethrower";
+    }
+    else if (weapon == railgun) {
+        return "railgun";
+    }
+    else if (weapon == grenade) {
+        return "grenade";
+    }
+    else if (weapon == hammer) {
+        return "hammer";
+    }
+
+    return "unknown";
+}
+
 void Arena::printRobotStats() {
     std::cout << "Robot stats:" << std::endl;
 
     for (std::size_t i = 0; i < m_robots.size(); i++) {
-        std::cout << "  " << m_robots[i].m_robot->print_stats() << std::endl;
+        RobotBase* robot = m_robots[i].m_robot;
+
+        int row = 0;
+        int col = 0;
+        robot->get_current_location(row, col);
+
+        std::string display_name = robot->m_name;
+        if (display_name == "Blank_Robot") {
+            display_name = std::string("Robot ") + m_robots[i].m_symbol;
+        }
+
+        std::cout << "  " << display_name
+                  << ": Health=" << robot->get_health()
+                  << " Weapon=" << weaponToString(robot->get_weapon())
+                  << " Armor=" << robot->get_armor()
+                  << " Move=" << robot->get_move_speed()
+                  << " Location=(" << row << "," << col << ")"
+                  << std::endl;
     }
 }
 
@@ -836,13 +870,31 @@ void Arena::run() {
             int winner_index = findLastLivingRobotIndex();
             if (winner_index != -1) {
                 std::cout << "Winner: robot " << m_robots[winner_index].m_symbol << std::endl;
-                std::cout << m_robots[winner_index].m_robot->print_stats() << std::endl;
+
+                RobotBase* winner = m_robots[winner_index].m_robot;
+
+                int row = 0;
+                int col = 0;
+                winner->get_current_location(row, col);
+
+                std::string display_name = winner->m_name;
+                if (display_name == "Blank_Robot") {
+                    display_name = std::string("Robot ") + m_robots[winner_index].m_symbol;
+                }
+
+                std::cout << display_name
+                            << ": Health=" << winner->get_health()
+                            << " Weapon=" << weaponToString(winner->get_weapon())
+                            << " Armor=" << winner->get_armor()
+                            << " Move=" << winner->get_move_speed()
+                            << " Location=(" << row << "," << col << ")"
+                            << std::endl;
             }
             else {
                 std::cout << "No robot survived." << std::endl;
             }
 
-            break;
+            return;
         }
 
         for (std::size_t i = 0; i < m_robots.size(); i++) {
@@ -877,4 +929,6 @@ void Arena::run() {
 
         m_round++;
     }
+    std::cout << "Max rounds reached." << std::endl;
+    std::cout << "No winner determined." << std::endl;
 }

@@ -6,7 +6,6 @@ private:
     int m_target_row;
     int m_target_col;
     bool m_has_target;
-    int m_scan_direction;
     int m_scan_mode_index;
     int m_no_target_turns;
     bool m_move_up;
@@ -25,7 +24,6 @@ Robot_AmbusherBot::Robot_AmbusherBot()
       m_target_row(-1),
       m_target_col(-1),
       m_has_target(false),
-      m_scan_direction(3),
       m_scan_mode_index(0),
       m_no_target_turns(0),
       m_move_up(true) {
@@ -37,7 +35,7 @@ void Robot_AmbusherBot::get_radar_direction(int& radar_direction) {
     int current_col = 0;
     get_current_location(current_row, current_col);
 
-    if (m_no_target_turns >= 3) {
+    if (m_no_target_turns >= 2) {
         radar_direction = 0;
         return;
     }
@@ -46,7 +44,6 @@ void Robot_AmbusherBot::get_radar_direction(int& radar_direction) {
         radar_direction = 3;
         return;
     }
-
     int scan_choices[3] = {2, 3, 4};
     radar_direction = scan_choices[m_scan_mode_index];
     m_scan_mode_index = (m_scan_mode_index + 1) % 3;
@@ -83,17 +80,29 @@ void Robot_AmbusherBot::get_move_direction(int& move_direction, int& move_distan
     int current_col = 0;
     get_current_location(current_row, current_col);
 
+    int max_move = get_move_speed();
+
     if (current_col > 0) {
         move_direction = 7;
-        move_distance = 1;
+        if (current_col >= max_move) {
+            move_distance = max_move;
+        }
+        else {
+            move_distance = current_col;
+        }
         return;
     }
 
-    if (m_no_target_turns >= 6) {
+    if (m_no_target_turns >= 4) {
         if (m_move_up) {
             if (current_row > 0) {
                 move_direction = 1;
-                move_distance = 1;
+                if (current_row >= max_move) {
+                    move_distance = max_move;
+                }
+                else {
+                    move_distance = current_row;
+                }
                 m_move_up = false;
                 return;
             }
@@ -105,7 +114,13 @@ void Robot_AmbusherBot::get_move_direction(int& move_direction, int& move_distan
         if (!m_move_up) {
             if (current_row < m_board_row_max - 1) {
                 move_direction = 5;
-                move_distance = 1;
+                int distance_to_bottom = (m_board_row_max - 1) - current_row;
+                if (distance_to_bottom >= max_move) {
+                    move_distance = max_move;
+                }
+                else {
+                    move_distance = distance_to_bottom;
+                }
                 m_move_up = true;
                 return;
             }
@@ -124,5 +139,5 @@ extern "C" RobotBase* create_robot() {
 }
 
 extern "C" const char* robot_summary() {
-    return "Holds wall, scans lanes, repositions if stalled.";
+    return "Railgun ambusher that patrols wall lanes.";
 }
